@@ -16,6 +16,7 @@
 import './demo.css'
 import { AppRenderer } from './renderer/AppRenderer'
 import { AppScene } from './scenes/AppScene'
+import { getRequiredElement } from './utils/dom'
 
 // Create the simplified HTML structure for the demo
 document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
@@ -110,95 +111,119 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   </main>
 `
 
-// Initialize the WebGL scene
-// This creates the Three.js renderer, scene, and starts the animation loop
-const container = document.querySelector('#webgl') as HTMLElement
-if (container) {
-	// AppRenderer wraps Three.js WebGLRenderer with automatic resizing and render loop
-	const renderer = new AppRenderer(container)
+// Global scene reference for cleanup
+let currentScene: AppScene | null = null
 
-	// AppScene contains all the 3D objects, shaders, and animation logic
-	const scene = new AppScene(renderer)
+/**
+ * Initialize the application
+ */
+async function initializeApp(): Promise<void> {
+  try {
+    // Get WebGL container
+    const container = getRequiredElement('#webgl')
 
-	// Connect the renderer to the scene
-	renderer.setScene(scene)
-	renderer.setCamera(scene.camera)
+    // Create renderer and scene
+    const renderer = new AppRenderer(container)
+    const scene = new AppScene(renderer)
+    currentScene = scene
 
-	// Set up the animation loop - this function is called every frame (~60fps)
-	renderer.onUpdate = (dt) => scene.update(dt)
+    // Connect renderer to scene
+    renderer.setScene(scene)
+    renderer.setCamera(scene.camera)
+    renderer.onUpdate = (deltaTime) => scene.update(deltaTime)
 
-	  // Initialize the scene (load assets, create materials, set up event listeners)
-  scene.init()
-  
-  // Set up HUD controls
-  setupHUD(scene)
+    // Initialize the scene (load assets, create materials, set up interactions)
+    await scene.init()
+
+    console.log('✅ Apple Event Logo Demo initialized successfully')
+  } catch (error) {
+    console.error('❌ Failed to initialize app:', error)
+    showErrorMessage('Failed to initialize the application. Please refresh the page.')
+  }
 }
 
 /**
- * Set up HUD parameter controls
+ * Show error message to user
  */
-function setupHUD(scene: AppScene) {
-  // Get HUD elements
-  const hudToggle = document.getElementById('hud-toggle') as HTMLButtonElement
-  const hudContent = document.getElementById('hud-content') as HTMLDivElement
-  const resetButton = document.getElementById('reset-params') as HTMLButtonElement
-  
-  // HUD collapse/expand functionality
-  let hudCollapsed = false
-  hudToggle.addEventListener('click', () => {
-    hudCollapsed = !hudCollapsed
-    hudContent.classList.toggle('collapsed', hudCollapsed)
-    hudToggle.textContent = hudCollapsed ? '+' : '−'
-  })
-  
-  // Parameter controls
-  const controls = [
-    // Visual parameters
-    { id: 'effect-intensity', param: 'effectIntensity' as const, valueId: 'intensity-value' },
-    { id: 'contrast-power', param: 'contrastPower' as const, valueId: 'power-value' },
-    { id: 'saturation', param: 'colorSaturation' as const, valueId: 'saturation-value' },
-    { id: 'heat-sensitivity', param: 'heatSensitivity' as const, valueId: 'heat-value' },
-    { id: 'video-blend', param: 'videoBlendAmount' as const, valueId: 'blend-value' },
-    { id: 'gradient-shift', param: 'gradientShift' as const, valueId: 'gradient-value' },
-    // Behavioral parameters
-    { id: 'heat-decay', param: 'heatDecay' as const, valueId: 'decay-value' },
-    { id: 'interaction-radius', param: 'interactionRadius' as const, valueId: 'radius-value' },
-    { id: 'reactivity', param: 'reactivity' as const, valueId: 'reactivity-value' }
-  ]
-  
-  // Set up each control
-  controls.forEach(({ id, param, valueId }) => {
-    const slider = document.getElementById(id) as HTMLInputElement
-    const valueDisplay = document.getElementById(valueId) as HTMLSpanElement
-    
-    if (slider && valueDisplay) {
-      // Update display and scene parameter when slider changes
-      slider.addEventListener('input', () => {
-        const value = parseFloat(slider.value)
-        scene.setParameter(param, value)
-        valueDisplay.textContent = value.toFixed(1)
-      })
-      
-      // Set initial value
-      valueDisplay.textContent = parseFloat(slider.value).toFixed(1)
+function showErrorMessage(message: string): void {
+  const errorDiv = document.createElement('div')
+  errorDiv.style.cssText = `
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #ff4444;
+    color: white;
+    padding: 12px 24px;
+    border-radius: 8px;
+    font-family: system-ui, -apple-system, sans-serif;
+    font-size: 14px;
+    z-index: 9999;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  `
+  errorDiv.textContent = message
+  document.body.appendChild(errorDiv)
+
+  // Auto-remove after 5 seconds
+  setTimeout(() => {
+    document.body.removeChild(errorDiv)
+  }, 5000)
+}
+
+/**
+ * Handle page visibility changes for performance
+ */
+function setupVisibilityHandling(): void {
+  document.addEventListener('visibilitychange', () => {
+    if (currentScene) {
+      // Could pause/resume animations based on visibility
+      // For now, just log the state change
+      console.log('Page visibility:', document.hidden ? 'hidden' : 'visible')
     }
-  })
-  
-  // Reset button
-  resetButton.addEventListener('click', () => {
-    scene.resetParameters()
-    
-    // Update all sliders and displays to default values
-    controls.forEach(({ id, param, valueId }) => {
-      const slider = document.getElementById(id) as HTMLInputElement
-      const valueDisplay = document.getElementById(valueId) as HTMLSpanElement
-      
-      if (slider && valueDisplay) {
-        const defaultValue = scene.parameters[param]
-        slider.value = defaultValue.toString()
-        valueDisplay.textContent = defaultValue.toFixed(1)
-      }
-    })
   })
 }
 
+/**
+ * Handle page unload cleanup
+ */
+function setupCleanup(): void {
+  window.addEventListener('beforeunload', () => {
+    if (currentScene) {
+      currentScene.dispose()
+      currentScene = null
+      console.log('🧹 Scene cleaned up before page unload')
+    }
+  })
+
+  // Handle hot module replacement in development
+  if (import.meta.hot) {
+    import.meta.hot.dispose(() => {
+      if (currentScene) {
+        currentScene.dispose()
+        currentScene = null
+        console.log('🔥 Scene cleaned up for HMR')
+      }
+    })
+  }
+}
+
+/**
+ * Main application entry point
+ */
+async function main(): Promise<void> {
+  // Set up error handling and cleanup
+  setupVisibilityHandling()
+  setupCleanup()
+
+  // Initialize the app
+  await initializeApp()
+}
+
+// Start the application
+main().catch(error => {
+  console.error('💥 Fatal error during startup:', error)
+  showErrorMessage('A fatal error occurred during startup.')
+})
+
+// Export for potential external use
+export { currentScene as scene }

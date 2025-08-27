@@ -1,22 +1,29 @@
 import * as THREE from 'three'
+import type { DrawRendererUniforms, DrawRendererOptions, Disposable } from '../types'
+import { DRAW_RENDERER, CAMERA_CONFIG } from '../config/constants'
+import { shaders } from '../shaders'
 
-export interface DrawRendererOptions {
-	radiusRatio?: number
-	isMobile?: boolean
-}
+export class DrawRenderer implements Disposable {
+	private camera: THREE.OrthographicCamera
+	private renderTargetA: THREE.WebGLRenderTarget
+	private renderTargetB: THREE.WebGLRenderTarget
+	private material: THREE.ShaderMaterial
+	private scene: THREE.Scene
+	private mesh: THREE.Mesh
+	private uniforms: DrawRendererUniforms
+	private options: DrawRendererOptions
 
-export class DrawRenderer {
-	camera: THREE.OrthographicCamera
-	renderTargetA: THREE.WebGLRenderTarget
-	renderTargetB: THREE.WebGLRenderTarget
-	material: THREE.ShaderMaterial
-	scene: THREE.Scene
-	options: DrawRendererOptions
-
-	constructor(size = 256, options: DrawRendererOptions = {}) {
+	constructor(size = DRAW_RENDERER.TEXTURE_SIZE, options: DrawRendererOptions = {}) {
 		this.options = options
-		this.camera = new THREE.OrthographicCamera(-0.5, 0.5, 0.5, -0.5, -1, 1)
-		this.camera.position.z = 1
+		this.camera = new THREE.OrthographicCamera(
+			CAMERA_CONFIG.LEFT,
+			CAMERA_CONFIG.RIGHT,
+			CAMERA_CONFIG.TOP,
+			CAMERA_CONFIG.BOTTOM,
+			CAMERA_CONFIG.NEAR,
+			CAMERA_CONFIG.FAR
+		)
+		this.camera.position.z = CAMERA_CONFIG.POSITION_Z
 
 		const rtOpts: THREE.RenderTargetOptions = {
 			type: THREE.HalfFloatType,
@@ -32,113 +39,97 @@ export class DrawRenderer {
 		this.renderTargetA = new THREE.WebGLRenderTarget(size, size, rtOpts)
 		this.renderTargetB = new THREE.WebGLRenderTarget(size, size, rtOpts)
 
+		this.uniforms = this.createUniforms()
 		this.material = new THREE.ShaderMaterial({
-			uniforms: {
-				uRadius: { value: new THREE.Vector3(-8, 0.9, 150) },
-				uPosition: { value: new THREE.Vector2(0, 0) },
-				uDirection: { value: new THREE.Vector4(0, 0, 0, 0) },
-				uResolution: { value: new THREE.Vector3(0, 0, 0) },
-				uTexture: { value: null },
-				uSizeDamping: { value: 0.8 },
-				uFadeDamping: { value: 0.98 },
-				uDraw: { value: 0 }
-			},
-			vertexShader: `
-				precision highp float;
-				varying vec2 vUv;
-				
-				void main() {
-					vUv = uv;
-					gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-				}
-			`,
-			fragmentShader: `
-				precision highp float;
-				
-				uniform float uDraw;
-				uniform vec3 uRadius;
-				uniform vec3 uResolution;
-				uniform vec2 uPosition;
-				uniform vec4 uDirection;
-				uniform float uSizeDamping;
-				uniform float uFadeDamping;
-				uniform sampler2D uTexture;
-				
-				varying vec2 vUv;
-				
-				void main() {
-					float aspect = uResolution.x / uResolution.y;
-					vec2 pos = uPosition;
-					pos.y /= aspect;
-					vec2 uv = vUv;
-					uv.y /= aspect;
-					
-					float dist = distance(pos, uv) / (uRadius.z / uResolution.x);
-					dist = smoothstep(uRadius.x, uRadius.y, dist);
-					
-					vec3 dir = uDirection.xyz * uDirection.w;
-					vec2 offset = vec2((-dir.x) * (1.0 - dist), (dir.y) * (1.0 - dist));
-					
-					vec4 color = texture(uTexture, vUv + (offset * 0.01));
-					color *= uFadeDamping;
-					color.r += offset.x;
-					color.g += offset.y;
-					color.rg = clamp(color.rg, -1.0, 1.0);
-					color.b += uDraw * (1.0 - dist);
-					
-					gl_FragColor = vec4(color.rgb, 1.0);
-				}
-			`,
+			uniforms: this.uniforms,
+			vertexShader: shaders.draw.vertex,
+			fragmentShader: shaders.draw.fragment,
 			depthTest: false,
 			transparent: true
 		})
 
 		this.scene = new THREE.Scene()
-		this.scene.add(new THREE.Mesh(new THREE.PlaneGeometry(1, 1), this.material))
+		this.mesh = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), this.material)
+		this.scene.add(this.mesh)
 	}
 
-	updateRadius(px = 0) {
-		this.material.uniforms.uRadius.value.z = px
-	}
-	
-	updateDraw(v = 0) {
-		(this.material.uniforms.uDraw.value as number) = v
-	}
-	
-	updatePosition(p: { x: number, y: number }, normalized = false) {
-		let x = p.x, y = p.y
-		if (normalized) {
-			x = 0.5 * p.x + 0.5
-			y = 0.5 * p.y + 0.5
+	private createUniforms(): DrawRendererUniforms {
+		const [radiusX, radiusY, radiusZ] = DRAW_RENDERER.UNIFORMS.RADIUS_VECTOR
+		return {
+			uRadius: { value: new THREE.Vector3(radiusX, radiusY, radiusZ) },
+			uPosition: { value: new THREE.Vector2(0, 0) },
+			uDirection: { value: new THREE.Vector4(0, 0, 0, 0) },
+			uResolution: { value: new THREE.Vector3(0, 0, 0) },
+			uTexture: { value: null },
+			uSizeDamping: { value: DRAW_RENDERER.UNIFORMS.SIZE_DAMPING },
+			uFadeDamping: { value: DRAW_RENDERER.UNIFORMS.FADE_DAMPING },
+			uDraw: { value: 0 }
 		}
-		this.material.uniforms.uPosition.value.set(x, y)
+	}
+
+	updateRadius(px = 0): void {
+		this.uniforms.uRadius.value.z = px
 	}
 	
-	updateDirection(d: { x: number, y: number }) {
-		this.material.uniforms.uDirection.value.set(d.x, d.y, 0, 100)
+	updateDraw(value = 0): void {
+		this.uniforms.uDraw.value = value
 	}
 	
-	resize(w: number, h: number) {
-		const ratio = h / (this.options.radiusRatio ?? 1000)
-		const radius = (this.options.isMobile ? 350 : 220) * ratio
+	updatePosition(position: { x: number; y: number }, normalized = false): void {
+		let x = position.x
+		let y = position.y
+		if (normalized) {
+			x = 0.5 * position.x + 0.5
+			y = 0.5 * position.y + 0.5
+		}
+		this.uniforms.uPosition.value.set(x, y)
+	}
+	
+	updateDirection(direction: { x: number; y: number }): void {
+		this.uniforms.uDirection.value.set(
+			direction.x,
+			direction.y,
+			0,
+			DRAW_RENDERER.UNIFORMS.DIRECTION_MULTIPLIER
+		)
+	}
+	
+	resize(width: number, height: number): void {
+		const ratio = height / (this.options.radiusRatio ?? DRAW_RENDERER.RADIUS_RATIO)
+		const baseRadius = this.options.isMobile 
+			? DRAW_RENDERER.MOBILE_RADIUS 
+			: DRAW_RENDERER.DESKTOP_RADIUS
+		const radius = baseRadius * ratio
 		
 		this.updateRadius(radius)
-		this.material.uniforms.uResolution.value.set(w, h, 1)
+		this.uniforms.uResolution.value.set(width, height, 1)
 	}
 	
-	getTexture() {
+	getTexture(): THREE.Texture {
 		return this.renderTargetB.texture
 	}
 	
-	render(renderer: THREE.WebGLRenderer) {
-		this.material.uniforms.uTexture.value = this.renderTargetB.texture
-		const prev = renderer.getRenderTarget()
+	render(renderer: THREE.WebGLRenderer): void {
+		this.uniforms.uTexture.value = this.renderTargetB.texture
+		const previousTarget = renderer.getRenderTarget()
 		renderer.setRenderTarget(this.renderTargetA)
 		if (renderer.autoClear) renderer.clear()
 		renderer.render(this.scene, this.camera)
-		renderer.setRenderTarget(prev)
-		const tmp = this.renderTargetA
+		renderer.setRenderTarget(previousTarget)
+		
+		// Ping-pong between render targets
+		const temp = this.renderTargetA
 		this.renderTargetA = this.renderTargetB
-		this.renderTargetB = tmp
+		this.renderTargetB = temp
+	}
+
+	/**
+	 * Dispose of all resources
+	 */
+	dispose(): void {
+		this.material.dispose()
+		this.renderTargetA.dispose()
+		this.renderTargetB.dispose()
+		this.mesh.geometry.dispose()
 	}
 }
