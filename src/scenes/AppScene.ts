@@ -75,8 +75,6 @@ export class AppScene extends THREE.Scene {
 		reactivity: 1.0            // How reactive the effect is to movement (0.1-3.0)
 	}
 	
-
-
 	/**
 	 * Convert hex color string to RGB values normalized to 0-1 range
 	 * Used for shader uniform color values
@@ -587,8 +585,6 @@ export class AppScene extends THREE.Scene {
 	setParameter(name: keyof typeof this.parameters, value: number) {
 		this.parameters[name] = value
 	}
-	
-
 	
 	/**
 	 * Reset all parameters to their default values

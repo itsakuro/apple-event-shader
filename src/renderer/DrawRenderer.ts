@@ -43,8 +43,52 @@ export class DrawRenderer {
 				uFadeDamping: { value: 0.98 },
 				uDraw: { value: 0 }
 			},
-			vertexShader: `precision highp float; varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
-			fragmentShader: `precision highp float; uniform float uDraw; uniform vec3 uRadius; uniform vec3 uResolution; uniform vec2 uPosition; uniform vec4 uDirection; uniform float uSizeDamping; uniform float uFadeDamping; uniform sampler2D uTexture; varying vec2 vUv; void main(){ float aspect=uResolution.x/uResolution.y; vec2 pos=uPosition; pos.y/=aspect; vec2 uv=vUv; uv.y/=aspect; float dist=distance(pos,uv)/(uRadius.z/uResolution.x); dist=smoothstep(uRadius.x,uRadius.y,dist); vec3 dir=uDirection.xyz*uDirection.w; vec2 offset=vec2((-dir.x)*(1.0-dist),(dir.y)*(1.0-dist)); vec4 color=texture(uTexture,vUv+(offset*0.01)); color*=uFadeDamping; color.r+=offset.x; color.g+=offset.y; color.rg=clamp(color.rg,-1.0,1.0); color.b+=uDraw*(1.0-dist); gl_FragColor=vec4(color.rgb,1.0); }`,
+			vertexShader: `
+				precision highp float;
+				varying vec2 vUv;
+				
+				void main() {
+					vUv = uv;
+					gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+				}
+			`,
+			fragmentShader: `
+				precision highp float;
+				
+				uniform float uDraw;
+				uniform vec3 uRadius;
+				uniform vec3 uResolution;
+				uniform vec2 uPosition;
+				uniform vec4 uDirection;
+				uniform float uSizeDamping;
+				uniform float uFadeDamping;
+				uniform sampler2D uTexture;
+				
+				varying vec2 vUv;
+				
+				void main() {
+					float aspect = uResolution.x / uResolution.y;
+					vec2 pos = uPosition;
+					pos.y /= aspect;
+					vec2 uv = vUv;
+					uv.y /= aspect;
+					
+					float dist = distance(pos, uv) / (uRadius.z / uResolution.x);
+					dist = smoothstep(uRadius.x, uRadius.y, dist);
+					
+					vec3 dir = uDirection.xyz * uDirection.w;
+					vec2 offset = vec2((-dir.x) * (1.0 - dist), (dir.y) * (1.0 - dist));
+					
+					vec4 color = texture(uTexture, vUv + (offset * 0.01));
+					color *= uFadeDamping;
+					color.r += offset.x;
+					color.g += offset.y;
+					color.rg = clamp(color.rg, -1.0, 1.0);
+					color.b += uDraw * (1.0 - dist);
+					
+					gl_FragColor = vec4(color.rgb, 1.0);
+				}
+			`,
 			depthTest: false,
 			transparent: true
 		})
@@ -53,21 +97,39 @@ export class DrawRenderer {
 		this.scene.add(new THREE.Mesh(new THREE.PlaneGeometry(1, 1), this.material))
 	}
 
-	updateRadius(px = 0) { this.material.uniforms.uRadius.value.z = px }
-	updateDraw(v = 0) { (this.material.uniforms.uDraw.value as number) = v }
+	updateRadius(px = 0) {
+		this.material.uniforms.uRadius.value.z = px
+	}
+	
+	updateDraw(v = 0) {
+		(this.material.uniforms.uDraw.value as number) = v
+	}
+	
 	updatePosition(p: { x: number, y: number }, normalized = false) {
 		let x = p.x, y = p.y
-		if (normalized) { x = 0.5 * p.x + 0.5; y = 0.5 * p.y + 0.5 }
+		if (normalized) {
+			x = 0.5 * p.x + 0.5
+			y = 0.5 * p.y + 0.5
+		}
 		this.material.uniforms.uPosition.value.set(x, y)
 	}
-	updateDirection(d: { x: number, y: number }) { this.material.uniforms.uDirection.value.set(d.x, d.y, 0, 100) }
+	
+	updateDirection(d: { x: number, y: number }) {
+		this.material.uniforms.uDirection.value.set(d.x, d.y, 0, 100)
+	}
+	
 	resize(w: number, h: number) {
 		const ratio = h / (this.options.radiusRatio ?? 1000)
 		const radius = (this.options.isMobile ? 350 : 220) * ratio
+		
 		this.updateRadius(radius)
 		this.material.uniforms.uResolution.value.set(w, h, 1)
 	}
-	getTexture() { return this.renderTargetB.texture }
+	
+	getTexture() {
+		return this.renderTargetB.texture
+	}
+	
 	render(renderer: THREE.WebGLRenderer) {
 		this.material.uniforms.uTexture.value = this.renderTargetB.texture
 		const prev = renderer.getRenderTarget()
@@ -75,6 +137,8 @@ export class DrawRenderer {
 		if (renderer.autoClear) renderer.clear()
 		renderer.render(this.scene, this.camera)
 		renderer.setRenderTarget(prev)
-		const tmp = this.renderTargetA; this.renderTargetA = this.renderTargetB; this.renderTargetB = tmp
+		const tmp = this.renderTargetA
+		this.renderTargetA = this.renderTargetB
+		this.renderTargetB = tmp
 	}
 }
