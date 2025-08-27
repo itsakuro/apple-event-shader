@@ -58,7 +58,7 @@ export class AppScene extends THREE.Scene {
 
 	// Color palette - Apple's thermal gradient colors (black to red/orange spectrum)
 	private readonly paletteHex = ['000000', '073dff', '53d5fd', 'fefcdd', 'ffec6a', 'f9d400', 'a61904']
-	
+
 	// HUD controllable parameters
 	parameters = {
 		// Visual parameters
@@ -68,13 +68,13 @@ export class AppScene extends THREE.Scene {
 		heatSensitivity: 0.5,      // Mouse interaction heat sensitivity
 		videoBlendAmount: 1.0,     // Video texture blend factor
 		gradientShift: 0.0,        // Gradient color shift
-		
+
 		// Behavioral parameters
 		heatDecay: 0.95,           // How quickly heat cools down (0.8-0.99)
 		interactionRadius: 1.0,    // Size of interaction area (0.1-3.0)
 		reactivity: 1.0            // How reactive the effect is to movement (0.1-3.0)
 	}
-	
+
 	/**
 	 * Convert hex color string to RGB values normalized to 0-1 range
 	 * Used for shader uniform color values
@@ -149,16 +149,27 @@ export class AppScene extends THREE.Scene {
 		// Global pointer tracking for cases where local events might be blocked
 		const updateWin = (clientX: number, clientY: number) => {
 			const rectRef = this.rendererWrapper.container.getBoundingClientRect()
+
 			// Convert screen coordinates to normalized device coordinates (-1 to 1)
-			const nx = rectRef.width > 0 ? (clientX - rectRef.left) / rectRef.width : 0.5
-			const ny = rectRef.height > 0 ? (clientY - rectRef.top) / rectRef.height : 0.5
+			let nx = 0.5
+			let ny = 0.5
+
+			if (rectRef.width > 0) {
+				nx = (clientX - rectRef.left) / rectRef.width
+			}
+			if (rectRef.height > 0) {
+				ny = (clientY - rectRef.top) / rectRef.height
+			}
+
 			const x = 2 * (nx - 0.5)
-			const y = 2 * -(ny - 0.5)  // Flip Y axis for WebGL coordinates
+			const y = 2 * -(ny - 0.5) // Flip Y axis for WebGL coordinates
 
 			// Calculate movement delta for direction tracking
 			const ndx = nx - ((this as any)._winLastNX ?? 0.5)
 			const ndy = ny - ((this as any)._winLastNY ?? 0.5)
-				; (this as any)._winLastNX = nx; (this as any)._winLastNY = ny
+
+				; (this as any)._winLastNX = nx
+				; (this as any)._winLastNY = ny
 
 			// Update mouse position and heat generation
 			this.mouse.target.set(x, y, 0)
@@ -182,10 +193,15 @@ export class AppScene extends THREE.Scene {
 	async loadAssets(width: number, height: number) {
 		// Load the Apple logo mask texture
 		this.maskTexture = await new Promise((resolve, reject) => {
-			new THREE.TextureLoader().load(MASK_URL, tex => {
-				tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-				resolve(tex)
-			}, undefined, err => reject(err))
+			new THREE.TextureLoader().load(
+				MASK_URL,
+				tex => {
+					tex.wrapS = tex.wrapT = THREE.RepeatWrapping
+					resolve(tex)
+				},
+				undefined,
+				err => reject(err)
+			)
 		})
 
 		// Create and configure the background video element
@@ -243,135 +259,147 @@ export class AppScene extends THREE.Scene {
 		const c6 = this.hexToRGB(this.paletteHex[5])  // Orange
 		const c7 = this.hexToRGB(this.paletteHex[6])  // Red
 
-		// Shader uniforms - these values are passed to the GPU shader
+		// Shader uniforms
 		const uniforms: any = {
-			blendVideo: { value: 0 },                    // Video texture blend factor
-			drawMap: { value: this.drawRenderer.getTexture() }, // Mouse interaction texture
-			textureMap: { value: this.videoTexture },    // Background video texture
-			maskMap: { value: this.maskTexture },        // Apple logo mask
-			scale: { value: [1, 1] },                     // Texture scale
-			offset: { value: [0, 0] },                    // Texture offset
-			opacity: { value: 1 },                       // Overall opacity
-			amount: { value: 0 },                        // Effect intensity
-			// Thermal gradient colors (7 color stops)
-			color1: { value: c1 }, color2: { value: c2 }, color3: { value: c3 }, color4: { value: c4 },
-			color5: { value: c5 }, color6: { value: c6 }, color7: { value: c7 },
+			blendVideo: { value: 0 },
+			drawMap: { value: this.drawRenderer.getTexture() },
+			textureMap: { value: this.videoTexture },
+			maskMap: { value: this.maskTexture },
+			scale: { value: [1, 1] },
+			offset: { value: [0, 0] },
+			opacity: { value: 1 },
+			amount: { value: 0 },
+
+			// Thermal gradient colors
+			color1: { value: c1 },
+			color2: { value: c2 },
+			color3: { value: c3 },
+			color4: { value: c4 },
+			color5: { value: c5 },
+			color6: { value: c6 },
+			color7: { value: c7 },
+
 			// Gradient blend points and fade ranges for smooth color transitions
-			blend: { value: [0.4, 0.7, 0.81, 0.91] },       // Color transition points
-			fade: { value: [1, 1, 0.72, 0.52] },            // Fade ranges for smooth blending
-			maxBlend: { value: [0.8, 0.87, 0.5, 0.27] },    // Maximum blend values
-			power: { value: 0.8 },                       // Contrast/gamma adjustment
-			rnd: { value: 0 },                           // Random value for animation variation
-			heat: { value: [0, 0, 0, 1.02] },              // Heat generation parameters
-			stretch: { value: [1, 1, 0, 0] },               // Texture stretching parameters
+			blend: { value: [0.4, 0.7, 0.81, 0.91] },
+			// Fade ranges for smooth blending
+			fade: { value: [1, 1, 0.72, 0.52] },
+			maxBlend: { value: [0.8, 0.87, 0.5, 0.27] },
+			// Contrast/gamma adjustment
+			power: { value: 0.8 },
+			// Random value for animation variation
+			rnd: { value: 0 },
+			heat: { value: [0, 0, 0, 1.02] },
+			stretch: { value: [1, 1, 0, 0] },
+
 			// HUD controllable parameters
-			effectIntensity: { value: 1.0 },             // Overall effect intensity multiplier
-			colorSaturation: { value: 1.3 },             // Color saturation boost
-			gradientShift: { value: 0.0 },               // Gradient color shift
+			effectIntensity: { value: 1.0 },
+			colorSaturation: { value: 1.3 },
+			gradientShift: { value: 0.0 },
+
 			// Behavioral parameters
-			interactionSize: { value: 1.0 }              // Interaction area size
+			interactionSize: { value: 1.0 }
 		}
 
-		// Vertex shader - simple pass-through that prepares UV coordinates
+		// Simple pass-through that prepares UV coordinates
 		const vertexShader = `
-      varying vec2 vUv;
-      varying vec4 vClipPosition;
-      
-      void main(){
-        vUv = uv;
-        vClipPosition = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-        gl_Position = vClipPosition;
-      }
-    `
+			varying vec2 vUv;
+			varying vec4 vClipPosition;
 
-		// Fragment shader - the complex thermal effect rendering
+			void main() {
+				vUv = uv;
+				vClipPosition = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+				gl_Position = vClipPosition;
+			}
+		`
+
+		// The actual thermal effect rendering
 		const fragmentShader = `
-      precision highp isampler2D;
-      precision highp usampler2D;
-      
-      // Input textures
-      uniform sampler2D drawMap;      // Mouse interaction heat map
-      uniform sampler2D textureMap;   // Background video texture
-      uniform sampler2D maskMap;      // Apple logo mask
-      
-      // Animation parameters
-      uniform float blendVideo;
-      uniform float amount;
-      uniform float opacity;
-      uniform vec2 scale;
-      uniform vec2 offset;
-      
-      			// Color palette (7 colors for thermal gradient)
+			precision highp isampler2D;
+			precision highp usampler2D;
+
+			// Input textures
+			uniform sampler2D drawMap;      // Mouse interaction heat map
+			uniform sampler2D textureMap;   // Background video texture
+			uniform sampler2D maskMap;      // Apple logo mask
+
+			// Animation parameters
+			uniform float blendVideo;
+			uniform float amount;
+			uniform float opacity;
+			uniform vec2 scale;
+			uniform vec2 offset;
+
+			// Color palette (7 colors for thermal gradient)
 			uniform vec3 color1, color2, color3, color4, color5, color6, color7;
 			uniform vec4 blend, fade, maxBlend;
 			uniform float power, rnd;
 			uniform vec4 heat, stretch;
-			
+
 			// HUD controllable parameters
 			uniform float effectIntensity;
 			uniform float colorSaturation;
 			uniform float gradientShift;
 			// Behavioral parameters
 			uniform float interactionSize;
-      
-      varying vec2 vUv;
-      varying vec4 vClipPosition;
-      
-      // Convert RGB to luminance for saturation adjustment
-      vec3 linearRgbToLuminance(vec3 c){
-        float f = dot(c, vec3(0.2126729, 0.7151522, 0.0721750));
-        return vec3(f);
-      }
-      
-      // Adjust color saturation
-      vec3 saturation(vec3 c, float s){
-        return mix(linearRgbToLuminance(c), c, s);
-      }
-      
-      // 2D rotation matrix
-      mat2 rotate2D(float angle) {
-        float c = cos(angle);
-        float s = sin(angle);
-        return mat2(c, -s, s, c);
-      }
-      
-      // Simple noise function
-      float noise(vec2 p) {
-        return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
-      }
-      
-      // Smooth noise
-      float smoothNoise(vec2 p) {
-        vec2 i = floor(p);
-        vec2 f = fract(p);
-        f = f * f * (3.0 - 2.0 * f);
-        
-        float a = noise(i);
-        float b = noise(i + vec2(1.0, 0.0));
-        float c = noise(i + vec2(0.0, 1.0));
-        float d = noise(i + vec2(1.0, 1.0));
-        
-        return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
-      }
-      
-      			// Create thermal color gradient based on temperature value
-			vec3 gradient(float t){
+
+			varying vec2 vUv;
+			varying vec4 vClipPosition;
+
+			// Convert RGB to luminance for saturation adjustment
+			vec3 linearRgbToLuminance(vec3 c) {
+				float f = dot(c, vec3(0.2126729, 0.7151522, 0.0721750));
+				return vec3(f);
+			}
+
+			// Adjust color saturation
+			vec3 saturation(vec3 c, float s) {
+				return mix(linearRgbToLuminance(c), c, s);
+			}
+
+			// 2D rotation matrix
+			mat2 rotate2D(float angle) {
+				float c = cos(angle);
+				float s = sin(angle);
+				return mat2(c, -s, s, c);
+			}
+
+			// Simple noise function
+			float noise(vec2 p) {
+				return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
+			}
+
+			// Smooth noise
+			float smoothNoise(vec2 p) {
+				vec2 i = floor(p);
+				vec2 f = fract(p);
+				f = f * f * (3.0 - 2.0 * f);
+
+				float a = noise(i);
+				float b = noise(i + vec2(1.0, 0.0));
+				float c = noise(i + vec2(0.0, 1.0));
+				float d = noise(i + vec2(1.0, 1.0));
+
+				return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+			}
+
+			// Create thermal color gradient based on temperature value
+			vec3 gradient(float t) {
 				// Apply gradient shift and color cycling
 				t = clamp(t + gradientShift, 0.0, 1.0);
-				
-				float p1=blend.x, p2=blend.y, p3=blend.z, p4=blend.w;
-				float p5=maxBlend.x, p6=maxBlend.y;
-				float f1=fade.x, f2=fade.y, f3=fade.z, f4=fade.w;
-				float f5=maxBlend.z, f6=maxBlend.w;
-				
+
+				float p1 = blend.x, p2 = blend.y, p3 = blend.z, p4 = blend.w;
+				float p5 = maxBlend.x, p6 = maxBlend.y;
+				float f1 = fade.x, f2 = fade.y, f3 = fade.z, f4 = fade.w;
+				float f5 = maxBlend.z, f6 = maxBlend.w;
+
 				// Smooth transitions between color stops
-				float b1 = smoothstep(p1 - f1*0.5, p1 + f1*0.5, t);
-				float b2 = smoothstep(p2 - f2*0.5, p2 + f2*0.5, t);
-				float b3 = smoothstep(p3 - f3*0.5, p3 + f3*0.5, t);
-				float b4 = smoothstep(p4 - f4*0.5, p4 + f4*0.5, t);
-				float b5 = smoothstep(p5 - f5*0.5, p5 + f5*0.5, t);
-				float b6 = smoothstep(p6 - f6*0.5, p6 + f6*0.5, t);
-				
+				float b1 = smoothstep(p1 - f1 * 0.5, p1 + f1 * 0.5, t);
+				float b2 = smoothstep(p2 - f2 * 0.5, p2 + f2 * 0.5, t);
+				float b3 = smoothstep(p3 - f3 * 0.5, p3 + f3 * 0.5, t);
+				float b4 = smoothstep(p4 - f4 * 0.5, p4 + f4 * 0.5, t);
+				float b5 = smoothstep(p5 - f5 * 0.5, p5 + f5 * 0.5, t);
+				float b6 = smoothstep(p6 - f6 * 0.5, p6 + f6 * 0.5, t);
+
 				// Blend colors based on temperature
 				vec3 col = color1;
 				col = mix(col, color2, b1);
@@ -380,68 +408,68 @@ export class AppScene extends THREE.Scene {
 				col = mix(col, color5, b4);
 				col = mix(col, color6, b5);
 				col = mix(col, color7, b6);
-				
+
 				return col;
 			}
-      
-      void main(){
-        // Convert clip space to UV coordinates for draw texture sampling
-        vec2 duv = vClipPosition.xy / vClipPosition.w;
-        duv = 0.5 + duv * 0.5;
-        
-        // Apply scaling to UV coordinates
-        vec2 uv = vUv;
-        uv -= 0.5;
-        uv /= scale;
-        uv += 0.5;
-        uv += offset;
-        
-        // Calculate opacity and amount factors
-        float o = clamp(opacity, 0.0, 1.0);
-        float a = clamp(amount, 0.0, 1.0);
-        float v = o * a;
-        
-        // Sample the Apple logo mask (green channel)
-        vec4 tex = texture(maskMap, uv + offset);
-        float mask = tex.g;
-        
-        // Sample mouse interaction data (heat map from DrawRenderer)
-        vec3 draw = texture(drawMap, duv).rgb;
-        float heatDraw = draw.b;
-        heatDraw *= mix(0.1, 1.0, mask);  // Apply mask to heat
-        
-        // Apply interaction size scaling
-        heatDraw *= interactionSize;
-        
-        // Sample background video with slight distortion from heat
-        vec2 off = draw.rg * 0.01;
-        vec3 video = textureLod(textureMap, uv + off, 0.0).rgb;
-        
-        // Enhance heat effect based on video content
-        float h = mix(pow(1.0 - video.r, 1.5), 1.0, 0.2) * 1.25;
-        heatDraw *= h;
-        
-        // Create base temperature map from video
-        float map = video.r;
-        map = pow(map, power);
-        
-        // Apply vertical gradient mask
-        float msk = smoothstep(0.2, 0.5, uv.y);
-        map = mix(map * 0.91, map, msk);
-        map = mix(0.0, map, v);
-        
-        // Apply circular fade from center
-        float fade = distance(vUv, vec2(0.5, 0.52));
-        fade = smoothstep(0.5, 0.62, 1.0 - fade);
-        
-        				// Generate final color using gradient function
+
+			void main() {
+				// Convert clip space to UV coordinates for draw texture sampling
+				vec2 duv = vClipPosition.xy / vClipPosition.w;
+				duv = 0.5 + duv * 0.5;
+
+				// Apply scaling to UV coordinates
+				vec2 uv = vUv;
+				uv -= 0.5;
+				uv /= scale;
+				uv += 0.5;
+				uv += offset;
+
+				// Calculate opacity and amount factors
+				float o = clamp(opacity, 0.0, 1.0);
+				float a = clamp(amount, 0.0, 1.0);
+				float v = o * a;
+
+				// Sample the Apple logo mask (green channel)
+				vec4 tex = texture(maskMap, uv + offset);
+				float mask = tex.g;
+
+				// Sample mouse interaction data (heat map from DrawRenderer)
+				vec3 draw = texture(drawMap, duv).rgb;
+				float heatDraw = draw.b;
+				heatDraw *= mix(0.1, 1.0, mask);  // Apply mask to heat
+
+				// Apply interaction size scaling
+				heatDraw *= interactionSize;
+
+				// Sample background video with slight distortion from heat
+				vec2 off = draw.rg * 0.01;
+				vec3 video = textureLod(textureMap, uv + off, 0.0).rgb;
+
+				// Enhance heat effect based on video content
+				float h = mix(pow(1.0 - video.r, 1.5), 1.0, 0.2) * 1.25;
+				heatDraw *= h;
+
+				// Create base temperature map from video
+				float map = video.r;
+				map = pow(map, power);
+
+				// Apply vertical gradient mask
+				float msk = smoothstep(0.2, 0.5, uv.y);
+				map = mix(map * 0.91, map, msk);
+				map = mix(0.0, map, v);
+
+				// Apply circular fade from center
+				float fade = distance(vUv, vec2(0.5, 0.52));
+				fade = smoothstep(0.5, 0.62, 1.0 - fade);
+
+				// Generate final color using gradient function
 				vec3 final = gradient(map + heatDraw);
 				final = saturation(final, colorSaturation);  // Apply controllable saturation
 				final *= fade;                    // Apply circular fade
 				final = mix(vec3(0.0), final, a * effectIntensity); // Apply overall amount with intensity multiplier
-				
+
 				gl_FragColor = vec4(final, 1.0);
-      }
+			}
     `
 
 		// Create shader material with uniforms and shaders
@@ -458,11 +486,94 @@ export class AppScene extends THREE.Scene {
 		this.add(this.heat)
 	}
 
-	onScroll() { const rect = this.scrollElement.getBoundingClientRect(); const top = rect.top; const half = rect ? 0.5 * rect.height : 0.5 * window.innerHeight; let r = top / half; r = r > 0 ? 0 : Math.abs(r); let a = this.lerp(1, 0.5, r); a = a < 0.5 ? 0.5 : a; let s = this.lerp(1, 1.1, r); s = s > 1.1 ? 1.1 : s; this.scrollAnimation.opacity.target = a; this.scrollAnimation.scale.target = s }
+	onScroll() {
+		const rect = this.scrollElement.getBoundingClientRect()
+		const top = rect.top
+		const half = rect ? 0.5 * rect.height : 0.5 * window.innerHeight
 
-	attachPointerEvents() { const primary = this.hitContainer || this.rendererWrapper.container; const secondary = this.rendererWrapper.container; let lastNX = 0.5, lastNY = 0.5; const update = (cx: number, cy: number) => { const rectRef = (this.hitContainer?.getBoundingClientRect()) || secondary.getBoundingClientRect(); const nx = rectRef.width > 0 ? (cx - rectRef.left) / rectRef.width : 0.5; const ny = rectRef.height > 0 ? (cy - rectRef.top) / rectRef.height : 0.5; const x = 2 * (nx - 0.5); const y = 2 * -(ny - 0.5); const ndx = nx - lastNX; const ndy = ny - lastNY; lastNX = nx; lastNY = ny; this.mouse.target.set(x, y, 0); this.drawRenderer.updateDirection({ x: ndx, y: ndy }); this.hold = true }; const bind = (el: Element) => { el.addEventListener('pointermove', (e: any) => update(e.clientX, e.clientY)); el.addEventListener('pointerdown', (e: any) => { update(e.clientX, e.clientY); this.hold = true }); el.addEventListener('pointerenter', (e: any) => update(e.clientX, e.clientY)); el.addEventListener('pointerup', () => { this.hold = false }); el.addEventListener('pointerleave', () => { this.hold = false }); }; bind(primary); if (secondary && secondary !== primary) bind(secondary) }
+		let r = top / half
+		r = r > 0 ? 0 : Math.abs(r)
 
-	onResize(width: number, height: number) { const r = width / height; let a, s; if (r >= 1) { s = 1; a = 1 * r } else { a = 1; s = 1 / r } this.camera.left = -a / 2; this.camera.right = a / 2; this.camera.top = s / 2; this.camera.bottom = -s / 2; this.camera.near = -1; this.camera.far = 1; this.camera.updateProjectionMatrix() }
+		let a = this.lerp(1, 0.5, r)
+		a = a < 0.5 ? 0.5 : a
+
+		let s = this.lerp(1, 1.1, r)
+		s = s > 1.1 ? 1.1 : s
+
+		this.scrollAnimation.opacity.target = a
+		this.scrollAnimation.scale.target = s
+	}
+
+	attachPointerEvents() {
+		const primary = this.hitContainer || this.rendererWrapper.container
+		const secondary = this.rendererWrapper.container
+		let lastNX = 0.5, lastNY = 0.5
+
+		const update = (cx: number, cy: number) => {
+			const rectRef = (this.hitContainer?.getBoundingClientRect()) || secondary.getBoundingClientRect()
+
+			let nx = 0.5
+			let ny = 0.5
+
+			if (rectRef.width > 0) {
+				nx = (cx - rectRef.left) / rectRef.width
+			}
+			if (rectRef.height > 0) {
+				ny = (cy - rectRef.top) / rectRef.height
+			}
+
+			const x = 2 * (nx - 0.5)
+			const y = 2 * -(ny - 0.5)
+			const ndx = nx - lastNX
+			const ndy = ny - lastNY
+
+			lastNX = nx
+			lastNY = ny
+
+			this.mouse.target.set(x, y, 0)
+			this.drawRenderer.updateDirection({ x: ndx, y: ndy })
+			this.hold = true
+		}
+
+		const bind = (el: Element) => {
+			el.addEventListener('pointermove', (e: any) => update(e.clientX, e.clientY))
+			el.addEventListener('pointerdown', (e: any) => {
+				update(e.clientX, e.clientY)
+				this.hold = true
+			})
+			el.addEventListener('pointerenter', (e: any) => update(e.clientX, e.clientY))
+			el.addEventListener('pointerup', () => {
+				this.hold = false
+			})
+			el.addEventListener('pointerleave', () => {
+				this.hold = false
+			})
+		}
+
+		bind(primary)
+		if (secondary && secondary !== primary) bind(secondary)
+	}
+
+	onResize(width: number, height: number) {
+		const r = width / height
+		let a, s
+
+		if (r >= 1) {
+			s = 1
+			a = 1 * r
+		} else {
+			a = 1
+			s = 1 / r
+		}
+
+		this.camera.left = -a / 2
+		this.camera.right = a / 2
+		this.camera.top = s / 2
+		this.camera.bottom = -s / 2
+		this.camera.near = -1
+		this.camera.far = 1
+		this.camera.updateProjectionMatrix()
+	}
 
 	/**
 	 * Main animation loop - called every frame (~60fps)
@@ -476,16 +587,20 @@ export class AppScene extends THREE.Scene {
 		this.mouse.position.lerp(this.mouse.target, this.lerpSpeed(0.8, dt))
 
 		// Update movement-based animation targets
-		this.move.target = this.hold ? 0.95 : 1.0  // Slightly dim when interacting
-		this.scrollAnimation.power.target = this.hold ? 1.0 : 0.8  // Boost contrast when interacting
+		this.move.target = this.hold ? 0.95 : 1.0       // Slightly dim when interacting
+		this.scrollAnimation.power.target = this.hold ? 1.0 : 0.8 // Boost contrast when interacting
 
 		// Smooth interpolation of animation values
 		this.move.value = this.lerp(this.move.value, this.move.target, this.lerpSpeed(0.01, dt))
 		this.scrollAnimation.power.value = this.lerp(this.scrollAnimation.power.value, this.scrollAnimation.power.target, this.lerpSpeed(0.01, dt))
 
 		// Clamp power value to valid range
-		if (this.scrollAnimation.power.value < 0.8) this.scrollAnimation.power.value = 0.8
-		if (this.scrollAnimation.power.value > 1.0) this.scrollAnimation.power.value = 1.0
+		if (this.scrollAnimation.power.value < 0.8) {
+			this.scrollAnimation.power.value = 0.8
+		}
+		if (this.scrollAnimation.power.value > 1.0) {
+			this.scrollAnimation.power.value = 1.0
+		}
 
 		// Update scroll-based opacity and scale
 		this.scrollAnimation.opacity.value = this.lerp(this.scrollAnimation.opacity.value, this.scrollAnimation.opacity.target * this.move.value, this.lerpSpeed(0.2, dt))
@@ -499,7 +614,9 @@ export class AppScene extends THREE.Scene {
 		// Video and interaction updates
 		if (this.videoReady) {
 			// Loop video between specific time points for seamless playback
-			if (this.video.currentTime >= 11.95) this.video.currentTime = 2.95
+			if (this.video.currentTime >= 11.95) {
+				this.video.currentTime = 2.95
+			}
 
 			// Update draw renderer with current mouse position
 			this.drawRenderer.updatePosition(this.mouse.position, true)
@@ -507,7 +624,9 @@ export class AppScene extends THREE.Scene {
 			// Accumulate heat when mouse is active
 			if (this.hold) {
 				this.heatUp += this.parameters.heatSensitivity * dt * 60
-				if (this.heatUp > 1.3) this.heatUp = 1.3  // Cap maximum heat
+				if (this.heatUp > 1.3) {
+					this.heatUp = 1.3 // Cap maximum heat
+				}
 			}
 
 			// Update draw renderer with current heat level
@@ -526,12 +645,12 @@ export class AppScene extends THREE.Scene {
 			u.amount.value = this.amount.value
 			u.blendVideo.value = this.parameters.videoBlendAmount
 			if (this.videoTexture) u.textureMap.value = this.videoTexture
-			
+
 			// Update HUD controllable parameters
 			u.effectIntensity.value = this.parameters.effectIntensity
 			u.colorSaturation.value = this.parameters.colorSaturation
 			u.gradientShift.value = this.parameters.gradientShift
-			
+
 			// Update behavioral parameters
 			u.interactionSize.value = this.parameters.interactionRadius
 
@@ -546,7 +665,7 @@ export class AppScene extends THREE.Scene {
 		// Cool down heat over time using configurable decay rate
 		this.heatUp *= this.parameters.heatDecay
 		if (this.heatUp < 0.001) this.heatUp = 0
-		
+
 
 
 		// Reset interaction state for next frame
@@ -578,14 +697,14 @@ export class AppScene extends THREE.Scene {
 
 		this.mediaButtonState()
 	}
-	
+
 	/**
 	 * Update a parameter value
 	 */
 	setParameter(name: keyof typeof this.parameters, value: number) {
 		this.parameters[name] = value
 	}
-	
+
 	/**
 	 * Reset all parameters to their default values
 	 */
